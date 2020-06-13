@@ -1,0 +1,117 @@
+
+#load the required packages & libraries
+
+install.packages("caret")
+library(caret)
+
+install.packages("ggplot2")
+
+install.packages("rpart")
+library(rpart)
+
+#Rattle is a free graphical interface for data science with R
+install.packages("rattle")
+library(rattle)
+
+install.packages("parallel")
+library(parallel)
+
+install.packages("doParallel")
+library(doParallel)
+
+#load the datasets
+
+getwd()
+
+setwd("D:/Users/850047630/Desktop")
+
+pml_training = read.csv("pmltraining.csv",  na.strings = c("NA", "#DIV/0!", ""), header = TRUE)
+
+pml_testing = read.csv("pml-testing.csv",na.strings = c("NA", "#DIV/0!", ""), header = TRUE)
+
+#check the dimension of training datasets
+dim(pml_training)
+
+#check the dimensions of testing datasets
+dim(pml_testing)
+
+#Data Cleaning 
+
+# NA Value are removed using the function is.na to test if the sum of column is or not NA before removing
+training1<- pml_training[,colSums(is.na(pml_training)) == 0]
+
+testing1<- pml_testing[,colSums(is.na(pml_testing)) == 0]
+
+#first seven columns are removed
+
+training<- training1[,-c(1:7)]
+testing<- testing1[,-c(1:7)]
+dim(training)
+
+dim(testing)
+
+#how many sambles we have for each classe
+table(training$classe)
+
+#Splitting of data
+
+
+inTrain = createDataPartition(training$classe, p = 0.70)[[1]]
+training_part = training[ inTrain,]
+valid_part = training[-inTrain,]
+
+#Model Prediction using Classification trees
+
+install.packages('e1071', dependencies=TRUE)
+
+model_CT <- train(classe~., data=training_part, method="rpart")
+fancyRpartPlot(model_CT$finalModel)
+
+
+#predict values using the valid set
+#calculate the confussion matrix 
+predict_validation<- predict(model_CT, newdata = valid_part)
+cm_ct<-confusionMatrix(predict_validation,valid_part$classe)
+cm_ct$cm_ct$overall['Accuracy']
+
+#----Accuracy is low----
+#let's try random forest
+
+#use k_fold=5  in cross_validation to improve the performance
+
+
+library('modeest')
+library('snow')
+
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+library(caret)
+trainControl_function <-trainControl(method = "cv",number = 5, allowParallel = TRUE) 
+
+model_rf <- train(classe~., data=training_part, method="rf",trControl = trainControl_function)
+
+print(model_rf$finalmodel)
+
+##stop of paralling computing.
+stopCluster(cluster)  
+registerDoSEQ()
+
+# predict values of valid set
+#calculate the confussion matrix with the accurary results.
+
+predict_validation_rf<- predict(model_rf, newdata = valid_part)
+cm_rf<-confusionMatrix(predict_validation_rf,valid_part$classe)
+cm_rf$overall['Accuracy']
+
+# plot of the model error rate by number of trees and 20 most important variables (out of 52)
+plot(model_rf$finalModel,main="Random forest model error rate by number of trees")
+
+
+varImp(model_rf)
+
+#Predicting using the test set
+predict_test<- predict(model_rf, testing)
+predict_test
+
+write.csv(predict_test,"D:/Users/850047630/Desktop/result.csv")
+
